@@ -1,25 +1,32 @@
 # backend/db_utils.py
-from pymongo import MongoClient
+import os
 from datetime import datetime, timezone
-from fastapi import HTTPException
+
 import numpy as np
+from fastapi import HTTPException
+from pymongo import MongoClient
+from dotenv import load_dotenv  # pip install python-dotenv
 
-client = MongoClient(
-    "mongodb+srv://admin:24052004@cluster0.ofish5d.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-)
+# 🔹 Load biến môi trường từ file .env (nếu có)
+load_dotenv()
 
-db = client["face_recognition_db"]
-face_collection = db["faces"]
+MONGODB_URI = os.getenv("MONGODB_URI")
+DB_NAME = os.getenv("MONGODB_DB_NAME", "face_recognition_db")
+FACE_COLLECTION_NAME = os.getenv("MONGODB_FACE_COLLECTION", "faces")
+
+if not MONGODB_URI:
+    raise RuntimeError("MONGODB_URI is not set. Please configure it in .env")
+
+client = MongoClient(MONGODB_URI)
+db = client[DB_NAME]
+face_collection = db[FACE_COLLECTION_NAME]
 
 # ✅ Tạo index unique cho user_id để đảm bảo 1 user chỉ có 1 bản ghi
 face_collection.create_index("user_id", unique=True)
 
 
 def get_face_by_user_id(user_id: str):
-    """
-    Tìm document khuôn mặt theo user_id.
-    Trả về None nếu không có.
-    """
+    """Tìm document khuôn mặt theo user_id. Trả về None nếu không có."""
     return face_collection.find_one({"user_id": user_id})
 
 
@@ -50,12 +57,13 @@ def store_face_data(user_id: str, name: str, face_embedding):
                 f"face_embedding must be a list of numbers, got {type(face_embedding)}"
             )
 
+        now = datetime.now(timezone.utc)
         face_data = {
             "user_id": user_id,
             "name": name,
             "face_embedding": face_embedding,
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "created_at": now,
+            "updated_at": now,
         }
 
         result = face_collection.insert_one(face_data)
@@ -68,10 +76,10 @@ def store_face_data(user_id: str, name: str, face_embedding):
         print(f"[MongoDB] Error storing face data: {e}")
         return False
 
+
 def find_similar_faces(query_embedding, top_k: int = 1):
     """
-    Tìm kiếm các khuôn mặt tương đồng bằng tích vô hướng (dot product)
-    như một dạng cosine similarity đơn giản.
+    Tìm kiếm các khuôn mặt tương đồng bằng tích vô hướng (dot product).
 
     Trả về list:
     [
@@ -84,13 +92,11 @@ def find_similar_faces(query_embedding, top_k: int = 1):
     ]
     """
     try:
-        # Chuyển vector truy vấn về list thuần để đưa vào pipeline
         if isinstance(query_embedding, np.ndarray):
             query_vec = query_embedding.astype(float).tolist()
         else:
             query_vec = np.array(query_embedding, dtype=np.float32).tolist()
 
-        # Giả định embedding có 256 chiều (chỉnh nếu model khác)
         dim = len(query_vec)
         pipeline = [
             {
