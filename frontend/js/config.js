@@ -1,36 +1,19 @@
-// static/js/config.js
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-  navigator.userAgent
-);
-
-const config = {
-  // Hiển thị gì trên overlay
+export default {
+  serverUrl: "http://localhost:8000/process_frame",
+  storeUrl: "http://localhost:8000/store",
+  retrieveUrl: "http://localhost:8000/retrieve",
+  lockersSummaryUrl: "http://localhost:8000/lockers/summary",
+  frameRate: 10,
+  isMobile: /Android|iPhone|iPad/.test(navigator.userAgent),
+  personColor: "#00FF00",
+  faceColor: "#FF0000",
+  borderWidth: 2,
   showPersons: true,
   showFaces: true,
   showConfidence: true,
   showFaceNames: true,
-
-  // Màu khung vẽ
-//   personColor: "#e74c3c",
-  faceColor: "#2ecc71",
-
-  // API endpoints
-  serverUrl: "/process_frame",
-  enrollUrl: "/enroll_face",
-  unlockUrl: "/unlock",
-
-  // FPS
-  frameRate: isMobile ? 15 : 25,
-
-  // Device info
-  isMobile,
-
-  // Label
-  desktopLabelFontSize: 10,
-  mobileLabelFontSize: 18,
+  labelMargin: 3,
   labelPadding: 4,
-  labelMargin: 6,
-  borderWidth: 2,
+  mobileLabelFontSize: 16,
+  desktopLabelFontSize: 14,
 };
-
-export default config;

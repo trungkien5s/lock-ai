@@ -116,6 +116,14 @@ export async function startCamera() {
 /**
  * Stop camera and processing
  */
+
+export async function ensureCameraStarted() {
+    if (!state.stream) {
+        await startCamera();
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+}
+
 export function stopCamera() {
     // Stop video stream
     if (state.stream) {

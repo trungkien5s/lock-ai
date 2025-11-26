@@ -14,20 +14,31 @@
         <p class="subtitle">Mở tủ thông minh bằng khuôn mặt – Powered by FastAPI & YOLO</p>
     </div>
 
-        <div class="main-container">
+    <div class="main-container">
         <!-- Left column: Statistics -->
         <div class="stats-container">
             <h3>Thống kê</h3>
             <div class="stats-content-wrapper">
                 <div class="stat-item">
-                    <span class="stat-label">Số người:</span>
+                    <span class="stat-label">Số tủ trống:</span>
+                    <span class="stat-value" id="freeLockerCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Tổng số tủ:</span>
+                    <span class="stat-value" id="totalLockerCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Số người trong khung hình:</span>
                     <span class="stat-value" id="personCount">0</span>
                 </div>
 
-                <!-- <div id="detectedPeopleList" class="detected-people-list">
-                    <h4>Người phát hiện:</h4>
+                <!-- Nếu muốn hiện danh sách face / người, bỏ comment đoạn này -->
+                <!--
+                <div id="detectedPeopleList" class="detected-people-list">
+                    <h4>Khuôn mặt phát hiện:</h4>
                     <div class="people-list-content"></div>
-                </div> -->
+                </div>
+                -->
             </div>
         </div>
 
@@ -55,51 +66,40 @@
                 </div>
 
                 <!-- Toggle camera sau (mobile) -->
-                <div id="toggleCameraContainer">
+                <!-- <div id="toggleCameraContainer">
                     <div class="control-row">
                         <span class="control-label">Camera sau:</span>
                         <label class="toggle-switch">
                             <input type="checkbox" id="toggleRearCamera">
                             <span class="slider"></span>
                         </label>
-                    </div>
+                    </div> -->
                 </div>
 
-                <button id="startButton" class="button">Bắt đầu Camera</button>
-                <button id="stopButton" class="button secondary" style="margin-top: 10px;">Dừng Camera</button>
+                <!-- <button id="startButton" class="button">Bắt đầu Camera</button>
+                <button id="stopButton" class="button secondary" style="margin-top: 10px;">Dừng Camera</button> -->
             </div>
 
             <!-- Smart Locker controls -->
             <div class="control-group">
                 <h3>Smart Locker</h3>
 
-                <div class="control-row">
-                    <label class="control-label" for="userIdInput">Mã người dùng:</label>
-                    <input id="userIdInput" type="text" class="camera-select" placeholder="VD: 1">
-                </div>
-
-                <div class="control-row">
-                    <label class="control-label" for="userNameInput">Tên người dùng:</label>
-                    <input id="userNameInput" type="text" class="camera-select" placeholder="VD: Hoang Trung Kien">
-                </div>
-
-                <button id="enrollButton" class="button" style="margin-top: 10px;">
-                    Đăng ký khuôn mặt
+                <button id="storeButton" class="button" style="margin-top: 10px;">
+                    Lưu đồ (Gửi đồ vào tủ)
                 </button>
 
-                <button id="unlockButton" class="button secondary" style="margin-top: 10px;">
-                    Mở tủ bằng khuôn mặt
+                <button id="retrieveButton" class="button secondary" style="margin-top: 10px;">
+                    Lấy đồ (Mở tủ)
                 </button>
 
                 <div class="locker-status" style="margin-top: 15px;">
-                    <p><strong>Trạng thái tủ:</strong> <span id="lockerStatusText">Chưa có thao tác</span></p>
-                    <p><strong>Người được nhận diện:</strong> <span id="recognizedUserText">-</span></p>
-                    <p><strong>Độ tin cậy:</strong> <span id="recognizedConfidenceText">-</span></p>
+                    <p><strong>Trạng thái thao tác:</strong> <span id="lockerStatusText">Chưa có thao tác</span></p>
+                    <p><strong>Tủ được cấp / mở:</strong> <span id="lockerIdText">-</span></p>
+                    <p><strong>Độ tin cậy nhận diện:</strong> <span id="recognizedConfidenceText">-</span></p>
                 </div>
             </div>
         </div>
     </div>
-
 
     <div class="footer">
         <p>© 2025 Smart Locker System using Facial Recognition | Powered by FastAPI & YOLO</p>
