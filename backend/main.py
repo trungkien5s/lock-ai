@@ -7,7 +7,7 @@ from pydantic import BaseModel
 import os
 import numpy as np
 import cv2
-
+from typing import List
 from app.box_detector import Detector
 from backend import db_utils  # Import các hàm từ db_utils.py
 
@@ -45,8 +45,8 @@ class UnlockResponse(BaseModel):
 
 
 # Ngưỡng để quyết định cho mở tủ
-UNLOCK_THRESHOLD = 0.95
-EXISTING_FACE_THRESHOLD = 0.95
+UNLOCK_THRESHOLD = 0.96
+EXISTING_FACE_THRESHOLD = 0.96
 
 # ----------------- API CŨ: process_frame (giữ để debug/thống kê) -----------------
 @app.post("/process_frame")
@@ -98,63 +98,90 @@ async def process_frame(file: UploadFile = File(...)):
     }
 
 
-# ----------------- API MỚI: ĐĂNG KÝ KHUÔN MẶT -----------------
 @app.post("/enroll_face", response_model=EnrollResponse)
 async def enroll_face(
-    file: UploadFile = File(...),
-    user_id: str = Query(..., description="Mã người dùng / mã tủ (vd: locker_01)"),
+    files: List[UploadFile] = File(None, description="Danh sách frame chụp khuôn mặt"),
+    file: UploadFile = File(None, description="1 frame chụp khuôn mặt (tương thích code cũ)"),
+    user_id: str = Query(..., description="Mã người dùng / mã tủ (vd: 1, 2, 3...)"),
     name: str = Query(..., description="Tên người dùng"),
 ):
     """
     Đăng ký khuôn mặt cho 1 user (tương ứng 1 locker).
 
-    Bổ sung:
-    - Check xem khuôn mặt này đã tồn tại trong DB chưa (theo embedding).
-    - Nếu có mặt nào trong DB có cosineSim >= EXISTING_FACE_THRESHOLD
-      thì báo lỗi "Khuôn mặt đã tồn tại" và không lưu thêm.
+    - Nếu frontend gửi nhiều file với field "files": dùng nhiều frame.
+    - Nếu frontend chỉ gửi 1 file với field "file": vẫn hoạt động như cũ.
     """
-    contents = await file.read()
-    nparr = np.frombuffer(contents, np.uint8)
-    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    if frame is None:
-        raise HTTPException(status_code=400, detail="Không đọc được ảnh từ file upload")
+    uploads: List[UploadFile] = []
 
-    person_count, face_count, person_boxes, face_boxes = detector.process_frame(frame)
+    # Nếu có nhiều file (field "files")
+    if files:
+        uploads.extend(files)
 
-    if face_count == 0:
-        raise HTTPException(status_code=400, detail="Không phát hiện khuôn mặt nào trong ảnh")
+    # Nếu chỉ có 1 file (field "file")
+    if file is not None:
+        uploads.append(file)
 
-    # Lấy khuôn mặt đầu tiên
-    coords, conf, emotion, embedding = face_boxes[0]
+    if not uploads:
+        raise HTTPException(status_code=400, detail="Không nhận được file ảnh nào để đăng ký")
 
-    if embedding is None:
+    embeddings: list[np.ndarray] = []
+
+    for upload in uploads:
+        contents = await upload.read()
+        nparr = np.frombuffer(contents, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        if frame is None:
+            print("[ENROLL] Bỏ qua frame: không đọc được ảnh")
+            continue
+
+        person_count, face_count, person_boxes, face_boxes = detector.process_frame(frame)
+
+        if face_count == 0:
+            print("[ENROLL] Frame không có khuôn mặt, bỏ qua")
+            continue
+
+        # Lấy khuôn mặt đầu tiên trong frame
+        coords, conf, emotion, embedding = face_boxes[0]
+
+        if embedding is None:
+            print("[ENROLL] Không trích xuất được embedding, bỏ qua frame này")
+            continue
+
+        embeddings.append(np.array(embedding, dtype=np.float32))
+
+    if len(embeddings) == 0:
         raise HTTPException(
-            status_code=400, detail="Không trích xuất được embedding khuôn mặt"
+            status_code=400,
+            detail="Không thu được khuôn mặt hợp lệ nào trong các frame đăng ký. Hãy thử lại và đảm bảo mặt rõ, đủ sáng.",
         )
 
-    # ✅ BƯỚC MỚI: kiểm tra xem khuôn mặt này đã tồn tại trong DB chưa
-    similar_faces = db_utils.find_similar_faces(embedding, top_k=1)
+    # ✅ Lấy trung bình embedding các frame -> 1 vector đại diện
+    embed_stack = np.stack(embeddings, axis=0)  # shape: (N, D)
+    avg_embedding = np.mean(embed_stack, axis=0)
+    print(f"[ENROLL] Collected {len(embeddings)} embeddings, using averaged template.")
+
+    # ✅ Kiểm tra xem khuôn mặt này đã tồn tại trong DB chưa (dùng avg embedding)
+    similar_faces = db_utils.find_similar_faces(avg_embedding, top_k=1)
 
     if similar_faces:
         best = similar_faces[0]
         existing_sim = float(best["cosineSim"])
 
         if existing_sim >= EXISTING_FACE_THRESHOLD:
-            # Đã có người khác có khuôn mặt rất giống (trùng)
             existing_user_id = best.get("user_id")
             existing_name = best.get("name")
 
             msg = (
                 f"Khuôn mặt này đã được đăng ký trong hệ thống "
-                f"cho người dùng '{existing_name}' (mã: {existing_user_id}), "
-                # f"độ tương đồng {existing_sim:.3f} ≥ {EXISTING_FACE_THRESHOLD}."
+                f"cho người dùng '{existing_name}' (mã: {existing_user_id})."
             )
             raise HTTPException(status_code=400, detail=msg)
 
-    # ✅ Nếu không trùng mặt, tiến hành lưu như cũ
+    # ✅ Nếu không trùng mặt, tiến hành lưu như cũ, nhưng dùng avg_embedding
     success = db_utils.store_face_data(
-        user_id=user_id, name=name, face_embedding=embedding
+        user_id=user_id, name=name, face_embedding=avg_embedding
     )
 
     if not success:
@@ -166,7 +193,7 @@ async def enroll_face(
         success=True,
         user_id=user_id,
         name=name,
-        message="Đăng ký khuôn mặt thành công",
+        message=f"Đăng ký khuôn mặt thành công với {len(embeddings)} khung hình",
     )
 
 

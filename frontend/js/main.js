@@ -25,6 +25,9 @@ const recognizedUserText = document.getElementById("recognizedUserText");
 const recognizedConfidenceText = document.getElementById(
   "recognizedConfidenceText"
 );
+const enrollStatusText = document.getElementById("enrollStatusText");
+const enrollProgressText = document.getElementById("enrollProgressText");
+
 
 let currentStream = null;
 let isStreaming = false;
@@ -332,7 +335,9 @@ async function processLoop(timestamp) {
   requestAnimationFrame(processLoop);
 }
 
-// ============ Handler: Đăng ký khuôn mặt ============
+
+// ============ Handler: Đăng ký khuôn mặt (nhiều frame) ============
+// ============ Handler: Đăng ký khuôn mặt (nhiều frame + hướng dẫn UI) ============
 async function handleEnrollFace() {
   const userId = userIdInput ? userIdInput.value.trim() : "";
   const userName = userNameInput ? userNameInput.value.trim() : "";
@@ -347,15 +352,49 @@ async function handleEnrollFace() {
     return;
   }
 
+  const NUM_FRAMES = 5;      // số khung hình sẽ chụp
+  const FRAME_DELAY = 500;   // mỗi 500ms chụp 1 lần
+
   try {
-    const blob = await captureFrameAsBlob();
-    if (!blob) {
-      alert("Không thể chụp hình từ camera.");
-      return;
+    // Cập nhật UI trạng thái
+    if (enrollStatusText) {
+      enrollStatusText.textContent =
+        "Đang thu thập khuôn mặt, vui lòng nhìn thẳng, quay trái/phải và mỉm cười nhẹ...";
+    }
+    if (enrollProgressText) {
+      enrollProgressText.textContent = `0/${NUM_FRAMES} khung hình`;
+    }
+
+    // Khoá nút đăng ký trong lúc đang chạy để tránh spam
+    if (enrollButton) {
+      enrollButton.disabled = true;
     }
 
     const formData = new FormData();
-    formData.append("file", blob, "enroll.jpg");
+    let capturedCount = 0;
+
+    for (let i = 0; i < NUM_FRAMES; i++) {
+      const blob = await captureFrameAsBlob();
+      if (blob) {
+        formData.append("files", blob, `enroll_${i}.jpg`);
+        capturedCount++;
+
+        if (enrollProgressText) {
+          enrollProgressText.textContent = `${capturedCount}/${NUM_FRAMES} khung hình`;
+        }
+      }
+      // Chờ một chút để user có thời gian đổi biểu cảm / góc mặt
+      await new Promise((resolve) => setTimeout(resolve, FRAME_DELAY));
+    }
+
+    if (capturedCount === 0) {
+      if (enrollStatusText) {
+        enrollStatusText.textContent =
+          "Đăng ký thất bại: không chụp được khung hình nào. Hãy thử lại.";
+      }
+      alert("Không thể chụp được khung hình nào từ camera.");
+      return;
+    }
 
     const url =
       `${config.enrollUrl}?user_id=${encodeURIComponent(
@@ -370,16 +409,42 @@ async function handleEnrollFace() {
     const data = await res.json();
 
     if (!res.ok) {
+      if (enrollStatusText) {
+        enrollStatusText.textContent =
+          `Đăng ký thất bại: ${data.detail || "Lỗi không xác định"}`;
+      }
       alert(`Đăng ký thất bại: ${data.detail || "Lỗi không xác định"}`);
       return;
     }
 
-    alert(`Đăng ký khuôn mặt thành công cho ${data.name} (${data.user_id})`);
+    if (enrollStatusText) {
+      enrollStatusText.textContent =
+        `Đăng ký thành công cho ${data.name} (${data.user_id}). Bạn có thể dùng khuôn mặt để mở tủ.`;
+    }
+    if (enrollProgressText) {
+      enrollProgressText.textContent =
+        `${capturedCount}/${NUM_FRAMES} khung hình (hoàn tất)`;
+    }
+
+    alert(
+      `Đăng ký khuôn mặt thành công cho ${data.name} (${data.user_id}) với ${capturedCount} khung hình.`
+    );
   } catch (err) {
     console.error("Lỗi khi đăng ký khuôn mặt:", err);
+    if (enrollStatusText) {
+      enrollStatusText.textContent =
+        "Có lỗi xảy ra khi đăng ký khuôn mặt. Hãy thử lại.";
+    }
     alert("Có lỗi xảy ra khi đăng ký khuôn mặt.");
+  } finally {
+    // Mở lại nút đăng ký
+    if (enrollButton) {
+      enrollButton.disabled = false;
+    }
   }
 }
+
+
 
 // ============ Handler: Mở tủ bằng khuôn mặt ============
 async function handleUnlockLocker() {

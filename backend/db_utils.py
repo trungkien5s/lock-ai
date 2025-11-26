@@ -10,19 +10,33 @@ from dotenv import load_dotenv  # pip install python-dotenv
 # 🔹 Load biến môi trường từ file .env (nếu có)
 load_dotenv()
 
+# ⚠️ Nhớ set đúng tên biến trên Render: MONGODB_URI, MONGODB_DB_NAME, MONGODB_FACE_COLLECTION
 MONGODB_URI = os.getenv("MONGODB_URI")
 DB_NAME = os.getenv("MONGODB_DB_NAME", "face_recognition_db")
 FACE_COLLECTION_NAME = os.getenv("MONGODB_FACE_COLLECTION", "faces")
 
 if not MONGODB_URI:
-    raise RuntimeError("MONGODB_URI is not set. Please configure it in .env")
+    raise RuntimeError("MONGODB_URI is not set. Please configure it in .env or Render env vars")
 
 client = MongoClient(MONGODB_URI)
 db = client[DB_NAME]
 face_collection = db[FACE_COLLECTION_NAME]
 
-# ✅ Tạo index unique cho user_id để đảm bảo 1 user chỉ có 1 bản ghi
+# ✅ Mỗi user_id chỉ có 1 mặt (1 embedding)
 face_collection.create_index("user_id", unique=True)
+
+
+def _to_unit_vector(vec) -> list[float]:
+    """
+    Chuyển embedding bất kỳ thành vector đơn vị (chuẩn hóa về độ dài = 1).
+    Nếu vector toàn 0 thì báo lỗi.
+    """
+    arr = np.array(vec, dtype=np.float32)
+    norm = np.linalg.norm(arr)
+    if norm == 0:
+        raise ValueError("Embedding vector has zero norm")
+    arr = arr / norm
+    return arr.astype(float).tolist()
 
 
 def get_face_by_user_id(user_id: str):
@@ -33,8 +47,8 @@ def get_face_by_user_id(user_id: str):
 def store_face_data(user_id: str, name: str, face_embedding):
     """
     Lưu trữ dữ liệu khuôn mặt vào MongoDB.
-    Mỗi document tương ứng với 1 user/locker.
-    KHÔNG cho phép một user_id có nhiều bản ghi.
+    - Chuẩn hóa embedding thành vector đơn vị trước khi lưu.
+    - Mỗi user_id chỉ có 1 bản ghi (1 khuôn mặt đại diện).
     """
     try:
         if not isinstance(user_id, str):
@@ -42,26 +56,18 @@ def store_face_data(user_id: str, name: str, face_embedding):
         if not isinstance(name, str):
             raise ValueError(f"name must be a string, got {type(name)}")
 
-        # ⚠️ Check: nếu user đã có khuôn mặt thì không cho đăng ký nữa
         existing = get_face_by_user_id(user_id)
         if existing:
             raise ValueError(f"Face for user_id={user_id} already exists")
 
-        # Đảm bảo embedding là list số
-        if isinstance(face_embedding, np.ndarray):
-            face_embedding = face_embedding.astype(float).tolist()
-        if not isinstance(face_embedding, list) or not all(
-            isinstance(x, (int, float)) for x in face_embedding
-        ):
-            raise ValueError(
-                f"face_embedding must be a list of numbers, got {type(face_embedding)}"
-            )
+        # ✅ Chuẩn hóa embedding
+        unit_vec = _to_unit_vector(face_embedding)
 
         now = datetime.now(timezone.utc)
         face_data = {
             "user_id": user_id,
             "name": name,
-            "face_embedding": face_embedding,
+            "face_embedding": unit_vec,
             "created_at": now,
             "updated_at": now,
         }
@@ -79,7 +85,10 @@ def store_face_data(user_id: str, name: str, face_embedding):
 
 def find_similar_faces(query_embedding, top_k: int = 1):
     """
-    Tìm kiếm các khuôn mặt tương đồng bằng tích vô hướng (dot product).
+    Tìm kiếm các khuôn mặt tương đồng bằng COSINE SIMILARITY.
+
+    Vì tất cả embedding (trong DB và query) đều đã được chuẩn hóa về vector đơn vị,
+    nên tích vô hướng (dot product) chính là cosine similarity.
 
     Trả về list:
     [
@@ -92,12 +101,10 @@ def find_similar_faces(query_embedding, top_k: int = 1):
     ]
     """
     try:
-        if isinstance(query_embedding, np.ndarray):
-            query_vec = query_embedding.astype(float).tolist()
-        else:
-            query_vec = np.array(query_embedding, dtype=np.float32).tolist()
-
+        # ✅ Chuẩn hóa query embedding
+        query_vec = _to_unit_vector(query_embedding)
         dim = len(query_vec)
+
         pipeline = [
             {
                 "$addFields": {
@@ -128,6 +135,8 @@ def find_similar_faces(query_embedding, top_k: int = 1):
 
         results = list(face_collection.aggregate(pipeline))
         print(f"[MongoDB] find_similar_faces -> {len(results)} result(s)")
+        for r in results:
+            print(f" - {r['user_id']} / {r['name']} / cosineSim={r['cosineSim']:.4f}")
         return results
 
     except Exception as e:
