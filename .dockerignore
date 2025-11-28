@@ -8,3 +8,4 @@ screenshot.png
 # Nếu không cần build lại YOLO trong container:
 dataset/
 scripts/
+

@@ -1,44 +1,117 @@
-###  Yêu cầu hệ thống
+1. Yêu cầu hệ thống
 
-- Hệ điều hành Ubuntu(hoặc tương tự có hỗ trợ các dependencies)
-- Python 3.10+
-- Thư viện Python: FastAPI, Uvicorn, PyMongo, TensorFlow, OpenCV, Ultralytics (YOLO)
-- Trình duyệt web hiện đại (Chrome, Firefox, Edge, Safari) có hỗ trợ WebRTC
-- MongoDB cài đặt trên máy tính cục bộ(sử dụng cách khác sẽ phải cấu hình lại trong mã nguồn)
+Hệ điều hành:
 
-### Cài đặt
+Ubuntu 20.04+ / Debian tương đương
 
-1. Clone mã nguồn từ kho lưu trữ:
-   ```
-   git clone https://github.com/hai4h/yolo-human-face-detection.git
-   cd yolo-human-face-detection
-   ```
-2. Cài đặt Framework hỗ trợ sử dụng GPU để tăng tốc xử lý(hãy chắc chắn rằng phần cứng được hỗ trợ)
-    ```
-    python3 -m venv .venv/
-    source .venv/bin/activate
-    ```
+Hoặc Windows 10+ / macOS (đều chạy được)
 
-    - AMD GPU (ROCM):
-    ```
-    pip install tensorflow-rocm==[wheel-version] torch==[wheel-version] torchvision==[wheel-version] -f [repo] --upgrade
-    ```
-    [wheel-version] là phiên bản cần cài đặt tương ứng trong repo.
-        VD: torch-2.4.0+rocm6.3.0-cp312-cp312-linux_x86_64.whl sẽ tương ứng torch==[2.4.0+rocm6.3.0]
+Python 3.11+
 
-    [repo] là https://repo.radeon.com/rocm/manylinux/rocm-rel-X.Y/, với X.Y là phiên bản của ROCm hiện có trên máy
+Thư viện Python (được quản lý trong requirements.txt):
+
+FastAPI, Uvicorn
+
+OpenCV
+
+Ultralytics / YOLO
+
+TensorFlow / TensorFlow Lite (cho model embedding khuôn mặt)
+
+PyMongo / driver MongoDB
+
+python-dotenv, numpy, v.v.
+
+Trình duyệt web hiện đại có hỗ trợ WebRTC:
+
+Chrome, Firefox, Edge, Safari
+
+MongoDB:
+
+Khuyến nghị: MongoDB Atlas (cloud)
+
+Hoặc: MongoDB cài trên máy local
+
+Chỉ cần cấu hình đúng MONGODB_URI trong file .env
+
+2. Clone mã nguồn
+git clone https://github.com/trungkien5s/lock-ai.git
+cd lock-ai
+
+3. Tạo môi trường ảo & cài đặt thư viện
+
+Linux / macOS:
+
+python3 -m venv .venv
+source .venv311/bin/activate
 
 
-    - NVIDIA GPU (CUDA):
-    ```
-    pip install tensorflow-cuda
-    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-    ```
+Windows:
+
+python -m venv .venv
+.venv311\Scripts\activate
 
 
-3. Cài đặt các thư viện Python:
-   ```
-   pip install -r ultralytics fastapi uvicorn opencv-python
-   ```
+Sau khi đã kích hoạt môi trường ảo, cài dependencies:
 
-4. Chạy file run_server.py để khởi động hệ thống, port của hệ thống được định nghĩa trong run_server.py
+pip install --upgrade pip
+pip install -r requirements.txt
+
+
+✅ Lưu ý: Không dùng lệnh cũ kiểu pip install -r ultralytics fastapi ... nữa – repo đã gom hết vào requirements.txt rồi.
+
+4. Cấu hình MongoDB (.env)
+
+Tạo file .env ở thư mục gốc của project (cùng cấp backend/, frontend/), dựa trên .env.example và chỉnh lại:
+
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/
+MONGODB_DB_NAME=face_recognition_db
+
+# Có thể giữ nguyên mặc định:
+MONGODB_LOCKER_COLLECTION=lockers
+MONGODB_SESSION_COLLECTION=locker_sessions
+
+
+Nếu dùng MongoDB local, bạn có thể để kiểu:
+
+MONGODB_URI=mongodb://localhost:27017/
+MONGODB_DB_NAME=face_recognition_db
+
+5. Chạy server
+
+Có 2 cách:
+
+Cách 1 – Dùng script run_server.py
+
+python run_server.py
+
+
+Script này sẽ gọi Uvicorn với app backend.main:app và port được cấu hình sẵn trong file run_server.py.
+
+Cách 2 – Chạy trực tiếp Uvicorn
+
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+
+6. Truy cập giao diện web
+
+Mở trình duyệt và truy cập:
+
+http://localhost:8000
+
+
+Cho phép trình duyệt truy cập camera.
+
+Sử dụng các chức năng:
+
+Lưu đồ (Store): nhấn nút tương ứng, nhìn vào camera, hệ thống sẽ gán embedding khuôn mặt với một tủ trống.
+
+Lấy đồ (Retrieve): nhấn nút tương ứng, nhìn vào camera, hệ thống sẽ tìm session còn active khớp với khuôn mặt và mở đúng tủ.
+
+7. (Tuỳ chọn) Chạy bằng Docker
+
+Trong repo có sẵn Dockerfile và docker-compose.yml, bạn có thể dùng:
+
+docker-compose up --build
+
+
+Nhớ chạy lệnh này tại thư mục gốc của project (nơi chứa Dockerfile và docker-compose.yml).
